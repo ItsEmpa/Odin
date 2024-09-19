@@ -93,6 +93,9 @@ val EntityPlayerSP.usingEtherWarp: Boolean
         return isSneaking && item.extraAttributes?.getBoolean("ethermerge") == true
     }
 
+val EntityPlayerSP.holdingEtherWarp: Boolean
+    get() = heldItem?.itemID == "ETHERWARP_CONDUIT" || heldItem?.extraAttributes?.getBoolean("ethermerge") == true
+
 /**
  * Returns the ID of held item
  */

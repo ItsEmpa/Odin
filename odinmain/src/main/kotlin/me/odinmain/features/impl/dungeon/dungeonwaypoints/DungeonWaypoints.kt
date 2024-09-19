@@ -17,12 +17,17 @@ import me.odinmain.utils.render.RenderUtils.renderVec
 import me.odinmain.utils.skyblock.*
 import me.odinmain.utils.skyblock.dungeon.DungeonUtils
 import me.odinmain.utils.skyblock.dungeon.tiles.FullRoom
+import net.minecraft.block.BlockChest
+import net.minecraft.block.BlockLever
 import net.minecraft.block.BlockSign
+import net.minecraft.block.state.IBlockState
 import net.minecraft.client.gui.*
+import net.minecraft.tileentity.TileEntitySkull
 import net.minecraft.util.*
 import net.minecraftforge.client.event.RenderGameOverlayEvent
 import net.minecraftforge.client.event.RenderWorldLastEvent
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent
+import org.lwjgl.input.Keyboard
 
 /**
  * Custom Waypoints for Dungeons
@@ -39,13 +44,61 @@ object DungeonWaypoints : Module(
     private var reachColor: Color by ColorSetting("Reach Color", default = Color(0, 255, 213, 0.43f), description = "Color of the reach box highlight.", allowAlpha = true).withDependency { reachEdits }
     var editText: Boolean by BooleanSetting("Edit Text", false, description = "Displays text under your crosshair telling you when you are editing waypoints.")
     var color: Color by ColorSetting("Color", default = Color.GREEN, description = "The color of the next waypoint you place.", allowAlpha = true).withDependency { colorPallet == 0 }
-    private val colorPallet: Int by SelectorSetting("Color pallet", "None", arrayListOf("None", "Aqua", "Magenta", "Yellow", "Lime"), description = "The color pallet of the next waypoint you place.")
+    private val colorPallet: Int by SelectorSetting(
+        "Color pallet",
+        SecretColors.NONE.displayName,
+        ArrayList(SecretColors.entries.map { it.displayName }),
+        description = "The color pallet of the next waypoint you place."
+    )
     var filled: Boolean by BooleanSetting("Filled", false, description = "If the next waypoint you place should be 'filled'.")
     var throughWalls: Boolean by BooleanSetting("Through walls", false, description = "If the next waypoint you place should be visible through walls.")
     var useBlockSize: Boolean by BooleanSetting("Use block size", false, description = "Use the size of the block you click for waypoint size.")
     var size: Double by NumberSetting("Size", 1.0, .125, 1.0, increment = 0.01, description = "The size of the next waypoint you place.").withDependency { !useBlockSize }
     var secretWaypoint: Boolean by BooleanSetting("Secret", default = false, description = "If the next waypoint you place should be removed when a secret is interacted with near this waypoint.")
     private val disableDepth: Boolean by BooleanSetting("Disable Depth", false, description = "Disables depth testing for waypoints.")
+
+    private val editModeKeybind: Keybinding by KeybindSetting("Edit Mode", Keyboard.KEY_NONE, description = "Allows you to edit waypoints.").onPress {
+        allowEdits = !allowEdits
+        modMessage("Dungeon Waypoint editing ${if (allowEdits) "§aenabled" else "§cdisabled"}§r!")
+    }
+    private var smartWaypoint: Boolean = false
+    private val smartWaypointKeybind: Keybinding by KeybindSetting("Smart Create Waypoint", Keyboard.KEY_NONE, description = "Allows you to create waypoints in smart way clicking.").onPress {
+        smartWaypoint = !smartWaypoint
+        modMessage("Smart Waypoint creation ${if (smartWaypoint) "§aenabled" else "§cdisabled"}§r!")
+    }
+
+    private enum class SecretColors(val displayName: String, val color: () -> Color, val checkBlock: (BlockPos) -> Boolean = { false }) {
+        NONE(
+            "None",
+            { color },
+        ),
+        ETHERWARP(
+            "Etherwarp",
+            { Color(91, 206, 250) },
+            { mc.thePlayer.usingEtherWarp && EtherWarpHelper.isValidEtherWarpBlock(it) }
+        ),
+        CHEST(
+            "Chest",
+            { Color.GREEN },
+            { getBlockAt(it) is BlockChest }
+        ),
+        WITHER_ESSENCE(
+            "Wither Essence",
+            { Color.MAGENTA },
+            { it.isWitherEssence() }
+        ),
+        LEVER(
+            "Lever",
+            { Color.YELLOW },
+            { getBlockAt(it) is BlockLever },
+        ),
+    }
+
+    private fun BlockPos.isWitherEssence(): Boolean {
+        val tile = mc.theWorld?.getTileEntity(this) as? TileEntitySkull ?: return false
+        return tile.playerProfile?.id.toString() == DungeonUtils.WITHER_ESSENCE_ID
+    }
+
     private val resetButton: () -> Unit by ActionSetting("Reset Current Room", description = "Resets the waypoints for the current room.") {
         val room = DungeonUtils.currentFullRoom ?: return@ActionSetting modMessage("§cRoom not found!")
 
@@ -135,14 +188,8 @@ object DungeonWaypoints : Module(
 
         val waypoints = getWaypoints(room)
 
-        val color = when (colorPallet) {
-            0 -> color
-            1 -> Color.CYAN
-            2 -> Color.MAGENTA
-            3 -> Color.YELLOW
-            4 -> Color.GREEN
-            else -> color
-        }
+        val color = (if (smartWaypoint) SecretColors.entries.find { it.checkBlock(pos) }
+        else SecretColors.entries[colorPallet])?.color?.invoke() ?: color
 
         if (mc.thePlayer?.isSneaking == true) {
             GuiSign.setCallback { enteredText ->
