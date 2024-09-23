@@ -69,27 +69,31 @@ object DungeonWaypoints : Module(
     private var renderText: Boolean by BooleanSetting("Render Text", true, description = "Renders the text of the waypoint.")
     private var noTextEdit: Boolean by BooleanSetting("No Text Edit", false, description = "Disables the ability to edit the text of the waypoint while sneaking.")
     private var hideEtherWaypointOnTp: Boolean by BooleanSetting("Hide Ether on TP", true, description = "Hides the ether waypoint when you teleport to it.")
-    private var itemWaypointKeybind: Keybinding by KeybindSetting("Change Item Waypoint Keybind", Keyboard.KEY_NONE, description = "Allows you to change waypoints to be set to item.").onPress {
+    private var itemWaypointKeybind: Keybinding by KeybindSetting("Change Item Waypoint Keybind", Keyboard.KEY_NONE, description = "Allows you to change the nearest waypoint to be set to item.").onPress {
         markLookedWaypointAs(WaypointType.ITEM)
     }
-    private var batWaypointKeybind: Keybinding by KeybindSetting("Change Bat Waypoint Keybind", Keyboard.KEY_NONE, description = "Allows you to change waypoints to be set to bat.").onPress {
+    private var batWaypointKeybind: Keybinding by KeybindSetting("Change Bat Waypoint Keybind", Keyboard.KEY_NONE, description = "Allows you to change the nearest waypoint to be set to bat.").onPress {
         markLookedWaypointAs(WaypointType.BAT)
     }
 
     private fun markLookedWaypointAs(type: WaypointType) {
         val room = DungeonUtils.currentFullRoom ?: return
         val waypoints = getWaypoints(room)
-        val waypoint = waypoints.find {
+        waypoints.minByOrNull {
+            if (it.clicked || it.getType() != null) return@minByOrNull Double.MAX_VALUE
             val vec = it.toVec3().subtractVec(x = room.clayPos.x, z = room.clayPos.z).rotateToNorth(room.room.rotation)
-            val aabb = it.aabb.offset(vec)
-            isLookingAtBoundingBox(aabb)
-        } ?: return modMessage("§cNo waypoint found!")
-        if (waypoint.getType() != null) return modMessage("§cWaypoint already has a type!")
-        with (waypoint) {
-            if (!waypoints.removeIf { it.toVec3().equal(toVec3()) }) return modMessage("error while deleting waypoint, annoy empa")
-            waypoints.add(DungeonWaypoint(x, y, z, type.color, filled, depth, aabb, type.name, true))
-            modMessage("Changed waypoint type to ${type.name}")
-        }
+            vec.distanceTo(mc.thePlayer.position.toVec3())
+            /*val aabb = it.aabb.offset(vec)
+            isLookingAtBoundingBox(aabb)*/
+        }?.markWaypointAs(type) ?: return modMessage("§cNo waypoint found!")
+    }
+
+    private fun DungeonWaypoint.markWaypointAs(type: WaypointType) {
+        val room = DungeonUtils.currentFullRoom ?: return
+        val waypoints = getWaypoints(room)
+        if (!waypoints.removeIf { it.toVec3().equal(toVec3())}) return modMessage("error while deleting waypoint, annoy empa")
+        waypoints.add(DungeonWaypoint(x, y, z, type.color, filled, depth, aabb, type.name, true))
+        modMessage("Changed waypoint type to ${type.name}")
         DungeonWaypointConfigCLAY.saveConfig()
         setWaypoints(room)
         glList = -1
