@@ -27,6 +27,7 @@ import net.minecraft.util.*
 import net.minecraftforge.client.event.RenderGameOverlayEvent
 import net.minecraftforge.client.event.RenderWorldLastEvent
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent
+import org.lwjgl.input.Keyboard
 import kotlin.math.absoluteValue
 import kotlin.reflect.KMutableProperty0
 
@@ -62,10 +63,38 @@ object DungeonWaypoints : Module(
     private var chestColor: Color by ColorSetting("Chest Color", default = Color.GREEN, description = "The color of the chest waypoint.").withDependency { smartWaypoint }
     private var witherEssenceColor: Color by ColorSetting("Wither Essence Color", default = Color.MAGENTA, description = "The color of the wither essence waypoint.").withDependency { smartWaypoint }
     private var leverColor: Color by ColorSetting("Lever Color", default = Color.YELLOW, description = "The color of the lever waypoint.").withDependency { smartWaypoint }
+    private var itemColor: Color by ColorSetting("Item Color", default = Color.YELLOW, description = "The color of the item waypoint.").withDependency { smartWaypoint }
+    private var batColor: Color by ColorSetting("Bat Color", default = Color.CYAN, description = "The color of the bat waypoint.").withDependency { smartWaypoint }
 
     private var renderText: Boolean by BooleanSetting("Render Text", true, description = "Renders the text of the waypoint.")
     private var noTextEdit: Boolean by BooleanSetting("No Text Edit", false, description = "Disables the ability to edit the text of the waypoint while sneaking.")
-    private var hideEtherWaypointOnTp: Boolean by BooleanSetting("Hide Ether Waypoint on TP", true, description = "Hides the ether waypoint when you teleport to it.")
+    private var hideEtherWaypointOnTp: Boolean by BooleanSetting("Hide Ether on TP", true, description = "Hides the ether waypoint when you teleport to it.")
+    private var itemWaypointKeybind: Keybinding by KeybindSetting("Change Item Waypoint Keybind", Keyboard.KEY_NONE, description = "Allows you to change waypoints to be set to item.").onPress {
+        markLookedWaypointAs(WaypointType.ITEM)
+    }
+    private var batWaypointKeybind: Keybinding by KeybindSetting("Change Bat Waypoint Keybind", Keyboard.KEY_NONE, description = "Allows you to change waypoints to be set to bat.").onPress {
+        markLookedWaypointAs(WaypointType.BAT)
+    }
+
+    private fun markLookedWaypointAs(type: WaypointType) {
+        val room = DungeonUtils.currentFullRoom ?: return
+        val waypoints = getWaypoints(room)
+        val waypoint = waypoints.find {
+            val vec = it.toVec3().subtractVec(x = room.clayPos.x, z = room.clayPos.z).rotateToNorth(room.room.rotation)
+            val aabb = it.aabb.offset(vec)
+            isLookingAtBoundingBox(aabb)
+        } ?: return modMessage("§cNo waypoint found!")
+        if (waypoint.getType() != null) return modMessage("§cWaypoint already has a type!")
+        with (waypoint) {
+            if (!waypoints.removeIf { it.toVec3().equal(toVec3()) }) return modMessage("error while deleting waypoint, annoy empa")
+            waypoints.add(DungeonWaypoint(x, y, z, type.color, filled, depth, aabb, type.name, true))
+            modMessage("Changed waypoint type to ${type.name}")
+        }
+        DungeonWaypointConfigCLAY.saveConfig()
+        setWaypoints(room)
+        glList = -1
+    }
+
 
     enum class WaypointType(
         val displayName: String,
@@ -95,6 +124,14 @@ object DungeonWaypoints : Module(
             "Lever",
             ::leverColor,
             { getBlockAt(it) is BlockLever },
+        ),
+        BAT(
+            "Bat",
+            ::batColor,
+        ),
+        ITEM(
+            "Item",
+            ::itemColor,
         ),
         ;
 
@@ -127,6 +164,7 @@ object DungeonWaypoints : Module(
         val secret: Boolean, var clicked: Boolean = false
     ) {
         fun isType(type: WaypointType): Boolean = title == type.name
+        fun getType() = WaypointType.entries.find { it.name == title }
     }
 
     override fun onKeybind() {
@@ -295,6 +333,19 @@ object DungeonWaypoints : Module(
     fun getWaypoints(room: FullRoom) : MutableList<DungeonWaypoint> {
         return DungeonWaypointConfigCLAY.waypoints.getOrPut(room.room.data.name) { mutableListOf() }
     }
+
+    private fun isLookingAtBoundingBox(boundingBox: AxisAlignedBB): Boolean {
+        val player = mc.thePlayer
+        val eyeLocation = Vec3(player.posX, player.posY + player.getEyeHeight().toDouble(), player.posZ)
+        val lookDirection = player.lookVec
+
+        val maxDistance = 1000.0
+        val intersectionResult = boundingBox.calculateIntercept(eyeLocation, eyeLocation.add(lookDirection.scale(maxDistance)))
+
+        return intersectionResult != null
+    }
+
+    fun Vec3.scale(scalar: Double): Vec3 = Vec3(xCoord * scalar, yCoord * scalar, zCoord * scalar)
 }
 
 object GuiSign : GuiScreen() {
