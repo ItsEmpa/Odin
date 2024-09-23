@@ -207,6 +207,20 @@ fun Vec3.rotateToNorth(rotation: Rotations): Vec3 {
 }
 
 /**
+ * Rotates a Vec3 to the given rotation.
+ * @param rotation The rotation to rotate to
+ * @return The rotated Vec3
+ */
+fun Vec3.rotateToNorthInverted(rotation: Rotations): Vec3 {
+    return when (rotation) {
+        Rotations.NORTH -> Vec3(-this.xCoord, this.yCoord, -this.zCoord)
+        Rotations.WEST -> Vec3(-this.zCoord, this.yCoord, this.xCoord)
+        Rotations.SOUTH -> Vec3(this.xCoord, this.yCoord, this.zCoord)
+        Rotations.EAST -> Vec3(this.zCoord, this.yCoord, -this.xCoord)
+        else -> this
+    }
+}
+/**
  * Rotates a Vec2 to the given rotation.
  * @param rotation The rotation to rotate to
  * @return The rotated Vec2

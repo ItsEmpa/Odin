@@ -69,22 +69,22 @@ object DungeonWaypoints : Module(
     private var renderText: Boolean by BooleanSetting("Render Text", true, description = "Renders the text of the waypoint.")
     private var noTextEdit: Boolean by BooleanSetting("No Text Edit", false, description = "Disables the ability to edit the text of the waypoint while sneaking.")
     private var hideEtherWaypointOnTp: Boolean by BooleanSetting("Hide Ether on TP", true, description = "Hides the ether waypoint when you teleport to it.")
-    private var itemWaypointKeybind: Keybinding by KeybindSetting("Change Item Waypoint Keybind", Keyboard.KEY_NONE, description = "Allows you to change the nearest waypoint to be set to item.").onPress {
+    private var itemWaypointKeybind: Keybinding by KeybindSetting("Change Item Waypoint", Keyboard.KEY_NONE, description = "Allows you to change the currently looked at waypoint to be set to item.").onPress {
         markLookedWaypointAs(WaypointType.ITEM)
     }
-    private var batWaypointKeybind: Keybinding by KeybindSetting("Change Bat Waypoint Keybind", Keyboard.KEY_NONE, description = "Allows you to change the nearest waypoint to be set to bat.").onPress {
+    private var batWaypointKeybind: Keybinding by KeybindSetting("Change Bat Waypoint", Keyboard.KEY_NONE, description = "Allows you to change the currently looked at waypoint to be set to bat.").onPress {
         markLookedWaypointAs(WaypointType.BAT)
     }
 
     private fun markLookedWaypointAs(type: WaypointType) {
         val room = DungeonUtils.currentFullRoom ?: return
         val waypoints = getWaypoints(room)
-        waypoints.minByOrNull {
-            if (it.clicked || it.getType() != null) return@minByOrNull Double.MAX_VALUE
-            val vec = it.toVec3().subtractVec(x = room.clayPos.x, z = room.clayPos.z).rotateToNorth(room.room.rotation)
-            vec.distanceTo(mc.thePlayer.position.toVec3())
-            /*val aabb = it.aabb.offset(vec)
-            isLookingAtBoundingBox(aabb)*/
+
+        waypoints.find {
+            if (it.clicked || it.getType() != null) return@find false
+            val vec = it.toVec3().rotateToNorthInverted(room.room.rotation).addVec(x = room.clayPos.x, z = room.clayPos.z)
+            val aabb = it.aabb.offset(vec)
+            isLookingAtBoundingBox(aabb)
         }?.markWaypointAs(type) ?: return modMessage("§cNo waypoint found!")
     }
 
